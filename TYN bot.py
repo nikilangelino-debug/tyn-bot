@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -10,14 +12,31 @@ from aiogram.fsm.storage.memory import MemoryStorage
 TOKEN = "8942425687:AAGaQTpFaW-kRWzOS2llrZoSFM70s7JMTHs"
 
 # Твой личный Telegram ID (чтобы бот знал, кому присылать готовые анкеты)
-# Можешь узнать свой ID у бота @userinfobot в Telegram
 ADMIN_ID = 5099881393
 
-# Настройка состояний анкеты
+# --- МИНИ ВЕБ-СЕРВЕР ДЛЯ RENDER (чтобы бот не засыпал через 15 минут) ---
+async def handle_ping(request):
+    return web.Response(text="Bot is alive!")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    app.router.add_get("/health", handle_ping)
+    
+    port = int(os.environ.get("PORT", 10000))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logging.info(f"Web server started on port {port}")
+
+
+# Настройка состояний анкеты (добавили курс)
 class Form(StatesGroup):
     name = State()
     age = State()
     occupation = State()
+    course = State()        # Новый шаг: выбор курса
     motivation = State()
 
 logging.basicConfig(level=logging.INFO)
@@ -53,16 +72,24 @@ async def process_age(message: types.Message, state: FSMContext):
 @dp.message(Form.occupation)
 async def process_occupation(message: types.Message, state: FSMContext):
     await state.update_data(occupation=message.text)
+    await message.answer("На какой курс ты хочешь записаться?")
+    await state.set_state(Form.course)
+
+# Шаг 4: Выбор курса
+@dp.message(Form.course)
+async def process_course(message: types.Message, state: FSMContext):
+    await state.update_data(course=message.text)
     await message.answer("Почему ты хочешь присоединиться к TYN? Какая у тебя цель?")
     await state.set_state(Form.motivation)
 
-# Шаг 4: Мотивация и завершение
+# Шаг 5: Мотивация и завершение
 @dp.message(Form.motivation)
 async def process_motivation(message: types.Message, state: FSMContext):
     data = await state.get_data()
     name = data.get("name")
     age = data.get("age")
     occupation = data.get("occupation")
+    course = data.get("course")
     motivation = message.text
     
     username = message.from_user.username
@@ -74,6 +101,7 @@ async def process_motivation(message: types.Message, state: FSMContext):
         f"👤 Имя: {name}\n"
         f"📅 Возраст: {age}\n"
         f"💼 Деятельность: {occupation}\n"
+        f"📚 Желаемый курс: {course}\n"
         f"🎯 Цель/Мотивация: {motivation}\n"
         f"🔗 Контакт: {user_link}"
     )
@@ -90,9 +118,11 @@ async def process_motivation(message: types.Message, state: FSMContext):
         "Мы изучим её и свяжемся с тобой в ближайшее время! 🚀"
     )
     await state.clear()
-
-async def main():
+    async def main():
+    # Запускаем фоновый веб-сервер для Render, чтобы сервис не засыпал
+    await start_web_server()
+    # Запускаем бота
     await dp.start_polling(bot)
 
-if __name__ == "__main__":
+if name == "main":
     asyncio.run(main())
