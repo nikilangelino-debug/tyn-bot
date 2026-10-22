@@ -30,13 +30,12 @@ async def start_web_server():
     await site.start()
     logging.info(f"Web server started on port {port}")
 
-
-# Настройка состояний анкеты (добавили курс)
+# Настройка состояний анкеты
 class Form(StatesGroup):
     name = State()
     age = State()
     occupation = State()
-    course = State()        # Новый шаг: выбор курса
+    course = State()
     motivation = State()
 
 logging.basicConfig(level=logging.INFO)
@@ -70,7 +69,7 @@ async def process_age(message: types.Message, state: FSMContext):
 
 # Шаг 3: Деятельность
 @dp.message(Form.occupation)
-async def process_occupation(message: types.Message, state: FSMContext):
+async def process_occupation(message: types.Message, state: FSmContext if 'FSmContext' in globals() else FSMContext):
     await state.update_data(occupation=message.text)
     await message.answer("На какой курс ты хочешь записаться?")
     await state.set_state(Form.course)
@@ -95,7 +94,6 @@ async def process_motivation(message: types.Message, state: FSMContext):
     username = message.from_user.username
     user_link = f"@{username}" if username else f"ID: {message.from_user.id}"
 
-    # Текст заявки для тебя (Администратора)
     admin_text = (
         f"🚨 Новая заявка в TYN!\n\n"
         f"👤 Имя: {name}\n"
@@ -106,22 +104,19 @@ async def process_motivation(message: types.Message, state: FSMContext):
         f"🔗 Контакт: {user_link}"
     )
 
-    # Отправляем готовую заявку тебе в ЛС
     try:
         await bot.send_message(ADMIN_ID, admin_text, parse_mode="Markdown")
     except Exception as e:
         logging.error(f"Не удалось отправить заявку админу: {e}")
 
-    # Сообщение кандидату
     await message.answer(
         "Спасибо! Твоя анкета успешно отправлена организатору.\n"
         "Мы изучим её и свяжемся с тобой в ближайшее время! 🚀"
     )
     await state.clear()
-    async def main():
-    # Запускаем фоновый веб-сервер для Render, чтобы сервис не засыпал
+
+async def main():
     await start_web_server()
-    # Запускаем бота
     await dp.start_polling(bot)
 
 if name == "main":
